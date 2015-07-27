@@ -14,9 +14,15 @@ class Music
     void playUp();
     void playDown();
     void playSound(int noteIndex);
+    void playSoundAsync(int noteIndex, int onTime);
+    void updateAsync();
   private:
     int _pin;    
     int currSFXID=0;
+    int currDelay;
+    int onTime;
+    bool soundIsOn=false;
+    long startTime;
     // notes in the melody:
     static const int win_length = 19;
     int win_melody[win_length] = {

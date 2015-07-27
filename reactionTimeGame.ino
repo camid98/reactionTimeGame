@@ -1,6 +1,7 @@
 #include "lilypadPins.h"
 #include "Music.h"
 #include "Light.h"
+#include "pitches.h"
 
 #define GAME_START 1
 #define MINI_WIN 2
@@ -17,7 +18,6 @@ static const unsigned long gameSpeeds[8] = {300, 275, 250, 230, 220, 210, 200, 1
 float delayOffset = 0.75;
 
 Light whiteLights[3] = {Light(WHITE_1), Light(WHITE_2), Light(WHITE_3)};
-
 Light winLight = Light(WHITE_4);
 Light rgbLight = Light(0);
                     // Sky Blue,     Magenta,       Green,         Red
@@ -27,6 +27,12 @@ int colors[4][3] = {{13, 155, 200}, {224, 24, 184}, {12, 252, 0}, {255, 0, 0}};
 #define GREEN 2
 #define RED 3
 int currColor=-1;
+// create a pattern of 3 to 10 lights (more as you have higher speed game)
+// 1 light must be green & no more than 3 are green
+int lightPattern[10];
+int numPattern=3;
+// sounds associated with each color, helps you remember the pattern
+int colorsSFX[4] = {NOTE_B1, NOTE_GS2, NOTE_C2, NOTE_DS3};
 
 // winning
 static const int miniWinTime = 2000;
@@ -68,14 +74,7 @@ void initGameLoop()
 void continueGameLoop()
 {
   mainGameState = PAUSE;
-  unsigned long delayx = gameSpeeds[currTurn]*delayOffset;
-  startLightsArray(lightSpeed, delayx);
-  Serial.write("light speed: ");
-  Serial.println(lightSpeed);
-  Serial.write("delayed by: ");
-  Serial.println(delayx);
-  Serial.write(" based on delayOffset being: ");
-  Serial.println(delayOffset);
+  startLightsArray(lightSpeed, gameSpeeds[currTurn]*delayOffset);
   
   setRandomRGB();
   mainGameState = GAME_LOOP;
@@ -105,6 +104,8 @@ void loop() {
       }
       
       rgbLight.updateLED();
+      music.updateAsync();
+      
       // loop thru lights & reset them if they're off
       int whiteLightsOff=0;
       for(int i=0; i<numWhiteLights; i++)
@@ -198,13 +199,14 @@ void setRandomRGB()
   
   if(currColor == GREEN)
     startTime=millis();
-  
    rgbLight.updateLED();
+   
+  //delay(100);
+  //music.playSoundAsync(colorsSFX[currColor], 300);
 }
 
 void miniWin()
 {
-  Serial.write("setting win state/n");
   mainGameState = MINI_WIN;
   numWins++;
   setLightsOff();
@@ -238,16 +240,4 @@ void miniLose()
   rgbLight.rgbLEDOn(colors[RED][0], colors[RED][1], colors[RED][2], miniLoseTime, 0);
   // play lose music
   music.playDown();
-}
-void debugOutputLights()
-{
-    // dump debug info
-    for(int p=0; p<numWhiteLights; p++)
-    {
-      Serial.write("light # ");
-      Serial.print(p, DEC);
-      Serial.write(" =======\n");
-      whiteLights[p].debugOutput();
-      Serial.write("\n");
-    }
 }

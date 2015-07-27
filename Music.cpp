@@ -81,3 +81,24 @@ void Music::playSound(int noteIndex)
   // stop the tone playing:
   noTone(_pin);
 }
+void Music::playSoundAsync(int noteIndex, int onTime)
+{
+  startTime = millis();
+  tone(_pin, sfx_scale[noteIndex]);
+  this->onTime = onTime;
+  soundIsOn = true;
+}
+
+void Music::updateAsync()
+{
+  if(!soundIsOn)
+    return;
+    
+  // time diff
+  if((millis()-startTime) > onTime)
+  {
+    //turn off sound
+    noTone(_pin);
+    soundIsOn = false;
+  }
+}
