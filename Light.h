@@ -15,6 +15,7 @@ class Light
     void setOff();
     void debugOutput();
     bool isActive();
+    
   private:
     int _pin;   
     bool _isOn=false; 
@@ -33,3 +34,4 @@ class Light
 };
 
 #endif
+
