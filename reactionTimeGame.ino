@@ -1,51 +1,47 @@
-#include "lilypadPins.h"
-#include "Music.h"
-#include "Light.h"
-#include "pitches.h"
+#include <MusicPlayer.h>
+#include <Pitches.h>
+#include "musicTrackDefinitions.h"
 
+#include "lilypadPins.h"
+#include "Light.h"
+#include "Colors.h"
+
+// Game States
 #define GAME_START 1
 #define MINI_WIN 2
 #define MINI_LOSE 3
 #define GAME_LOOP 4
-#define PAUSE 5
-#define WIN 6
-#define LOSE 7
+#define PAUSE     5
+#define GAME_OVER 6
 
-static const int maxTurns = 8;
-static const int reqForWin = 6;
-static const int numWhiteLights = 3;
-static const unsigned long gameSpeeds[8] = {300, 275, 250, 230, 220, 210, 200, 180};
+#define GAME_UPDATE_SPEED 100 // update 20 times a second (1000/50)
+
+int mainGameState = GAME_START;
+
+// Constants
+static const int MAX_TURNS = 2;
+static const int REQ_FOR_WIN = 1;
+static const int NUM_WHITE_LIGHTS = 3;
+static const unsigned long GAME_ROUND_SPEEDS[8] = {300, 275, 250, 230, 220, 210, 200, 180};
+static const int WIN_ROUND_TIME = 2000; // ms
+static const int LOSE_ROUND_TIME = 2000; // ms
+static const int WIN_COLOR = GREEN;
+static const int LOSE_COLOR = SALMON;
+
 float delayOffset = 0.75;
 
 Light whiteLights[3] = {Light(WHITE_1), Light(WHITE_2), Light(WHITE_3)};
-Light winLight = Light(WHITE_4);
+Light winLight = Light(WHITE_4); // todo hook up 4th light, or replace with 3rd light?
 Light rgbLight = Light(0);
-                    // Sky Blue,     Magenta,       Green,         Red
-int colors[4][3] = {{13, 155, 200}, {224, 24, 184}, {12, 252, 0}, {255, 0, 0}};
-#define SKY_BLUE 0
-#define PINK 1
-#define GREEN 2
-#define RED 3
 int currColor=-1;
-// create a pattern of 3 to 10 lights (more as you have higher speed game)
-// 1 light must be green & no more than 3 are green
-int lightPattern[10];
-int numPattern=3;
-// sounds associated with each color, helps you remember the pattern
-int colorsSFX[4] = {NOTE_B1, NOTE_GS2, NOTE_C2, NOTE_DS3};
+int prevTime;
 
-// winning
-static const int miniWinTime = 2000;
-static const int miniLoseTime = 2000;
-
-//Music & SFX
-Music music(BUZZER_PIN);
+//MusicPlayer & SFX
+MusicPlayer music(BUZZER_PIN);
 
 // Vars to reinitialize every game
-int mainGameState = GAME_START;
 int currTurn = 0;
 int numWins = 0;
-unsigned long startTime;
 unsigned long lightSpeed;
 
 
@@ -64,23 +60,25 @@ void initGameLoop()
   mainGameState = PAUSE;
   numWins = 0;
   currTurn = 0;
-  startTime;
-  lightSpeed=gameSpeeds[0];
-  music.init();
-  
+  lightSpeed=GAME_ROUND_SPEEDS[0];
+  music.init(true);
   continueGameLoop(); 
 }
 
 void continueGameLoop()
 {
   mainGameState = PAUSE;
-  startLightsArray(lightSpeed, gameSpeeds[currTurn]*delayOffset);
+  startLightsArray(lightSpeed, GAME_ROUND_SPEEDS[currTurn]*delayOffset);
   
   setRandomRGB();
   mainGameState = GAME_LOOP;
 }
 
 void loop() {
+    
+  music.updateTrack();
+  rgbLight.updateLED();
+  
   switch(mainGameState)
   {
     case GAME_LOOP:
@@ -88,14 +86,12 @@ void loop() {
       // if user is pressing the button
       if(digitalRead(BUTTON) == LOW)
       {
-        // pressing button
-        // if green, you win
-        if(currColor==GREEN)
+        if(currColor==WIN_COLOR)
         {
           Serial.write("mini-win\n");
           miniWin();
         }
-        else // else color is not green so you lose
+        else // else color is not WIN_COLOR so you lose
         {
           Serial.write("mini-loss\n");
           miniLose();
@@ -103,18 +99,15 @@ void loop() {
         return;
       }
       
-      rgbLight.updateLED();
-      music.updateAsync();
-      
       // loop thru lights & reset them if they're off
       int whiteLightsOff=0;
-      for(int i=0; i<numWhiteLights; i++)
+      for(int i=0; i<NUM_WHITE_LIGHTS; i++)
       {
         whiteLights[i].updateLED();
         if(!whiteLights[i].isActive()){
           whiteLightsOff++;
         }
-        if(whiteLightsOff==numWhiteLights)
+        if(whiteLightsOff==NUM_WHITE_LIGHTS)
         {
           //restart lights
           startLightsArray(lightSpeed, lightSpeed*delayOffset);
@@ -131,18 +124,15 @@ void loop() {
        {
          // decide if the game is over
         currTurn++;
-        if(currTurn >= maxTurns)
+        if(currTurn >= MAX_TURNS)
         {
           gameComplete();
           return;
         }
         
          //reset game at new speed
-         lightSpeed = gameSpeeds[currTurn];
+         lightSpeed = GAME_ROUND_SPEEDS[currTurn];
          continueGameLoop();
-       }
-       else {
-         rgbLight.updateLED();
        }
      break;
      }
@@ -153,18 +143,22 @@ void loop() {
        {
          // decide if the game is over
         currTurn++;
-        if(currTurn >= maxTurns)
+        if(currTurn >= MAX_TURNS)
         {
           gameComplete();
           return;
         }
         
          // reset game at slower speed
-         lightSpeed = gameSpeeds[currTurn];
+         lightSpeed = GAME_ROUND_SPEEDS[currTurn];
          continueGameLoop();
        }
-       else
-         rgbLight.updateLED();
+     break;
+     }
+     case GAME_OVER:
+     {
+       if(music.isDonePlaying())
+         initGameLoop();
      break;
      }
   }
@@ -175,7 +169,7 @@ void gameComplete()
   Serial.write("Game Complete");
   
   // decide if they won or lost
-  if(numWins > reqForWin)
+  if(numWins > REQ_FOR_WIN)
   {
     win();
   }
@@ -186,7 +180,7 @@ void gameComplete()
 }
 void startLightsArray(int onTime, int betweenTime)
 { 
-  for(int i=0; i<numWhiteLights; i++)
+  for(int i=0; i<NUM_WHITE_LIGHTS; i++)
   {
     whiteLights[i].whiteLEDOn(onTime, betweenTime*i);
   }
@@ -194,15 +188,16 @@ void startLightsArray(int onTime, int betweenTime)
 
 void setRandomRGB()
 {
-  currColor = random(3);
-  rgbLight.rgbLEDOn(colors[currColor][0], colors[currColor][1], colors[currColor][2], lightSpeed*numWhiteLights*(1+delayOffset)-lightSpeed*delayOffset, 0);
-  
-  if(currColor == GREEN)
-    startTime=millis();
-   rgbLight.updateLED();
-   
+  // 30% of the time, it's GREEN
+  // 70% of the time, it's a random color
+  int newColor = random(10);
+  if(newColor<3) // GREEN
+    currColor = GREEN;
+  else
+    currColor = random(NUM_COLORS);
+
+  rgbLight.rgbLEDOn(COLORS[currColor][0], COLORS[currColor][1], COLORS[currColor][2], lightSpeed*NUM_WHITE_LIGHTS*(1+delayOffset)-lightSpeed*delayOffset, 0);   
   //delay(100);
-  //music.playSoundAsync(colorsSFX[currColor], 300);
 }
 
 void miniWin()
@@ -211,25 +206,28 @@ void miniWin()
   numWins++;
   setLightsOff();
   
-  // show green color
-  rgbLight.rgbLEDOn(colors[GREEN][0], colors[GREEN][1], colors[GREEN][2], miniWinTime, 0);
-  music.playUp();
+  // show WIN_COLOR color
+  rgbLight.rgbLEDOn(COLORS[WIN_COLOR][0], COLORS[WIN_COLOR][1], COLORS[WIN_COLOR][2], WIN_ROUND_TIME, 0);
+
+  // play miniWin music
+  music.playTrack(miniWinMusic, MINI_WIN_NUM);
 }
 void win()
 {
   // play win music
-  music.playWin();
-  initGameLoop();
+  music.playTrack(starWars, STAR_WARS_NUM);
+  mainGameState = GAME_OVER;
 }
 void lose()
 {
-  music.playLose();
-  initGameLoop();
+  //music.playLose();
+  music.playTrack(loseMusic, LOSE_MUSIC_NUM);
+  mainGameState = GAME_OVER;
 }
 void setLightsOff()
 {
   // turn off white leds
-  for(int i=0; i<numWhiteLights; i++)
+  for(int i=0; i<NUM_WHITE_LIGHTS; i++)
     whiteLights[i].setOff();
 }
 
@@ -237,7 +235,9 @@ void miniLose()
 {
   mainGameState = MINI_LOSE;
   setLightsOff();
-  rgbLight.rgbLEDOn(colors[RED][0], colors[RED][1], colors[RED][2], miniLoseTime, 0);
+  rgbLight.rgbLEDOn(COLORS[LOSE_COLOR][0], COLORS[LOSE_COLOR][1], COLORS[LOSE_COLOR][2], LOSE_ROUND_TIME, 0);
+  
   // play lose music
-  music.playDown();
+  music.playTrack(miniLoseMusic, MINI_LOSE_NUM);
 }
+
